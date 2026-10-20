@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import './App.css'
+import { ChatPanel } from './components/ChatPanel'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 const MAX_FILE_SIZE = 100 * 1024 * 1024
@@ -256,6 +257,10 @@ function App() {
               </div>
             )}
           </article>
+          <ChatPanel
+            sourceId={['.pdf', '.pptx'].includes(fileExtension(selectedFile?.name || '')) && uploadedDocumentId ? uploadedDocumentId : null}
+            sourceType={fileExtension(selectedFile?.name || '') === '.pdf' ? 'pdf' : fileExtension(selectedFile?.name || '') === '.pptx' ? 'pptx' : null}
+          />
         </section>
 
         <section className="how-section" id="how-it-works">
