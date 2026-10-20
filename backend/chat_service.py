@@ -116,6 +116,13 @@ class GroundedChatService:
         except Exception as exc:
             raise ChatUnavailableError("Answer generation unavailable.") from exc
 
+        if answer is None:
+            return ChatResponse(
+                session_id=request.session_id,
+                answer=REFUSAL,
+                grounded=False,
+                citations=[],
+            )
         if not isinstance(answer, str) or not answer.strip():
             raise ChatUnavailableError("Answer generation returned no result.")
 

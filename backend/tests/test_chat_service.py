@@ -67,15 +67,16 @@ class Retriever:
 
 
 class Provider:
-    def __init__(self, fail=False):
+    def __init__(self, fail=False, result="Answer based on supplied lecture evidence"):
         self.evidence = None
         self.fail = fail
+        self.result = result
 
     async def answer(self, question, evidence):
         self.evidence = evidence
         if self.fail:
             raise RuntimeError("Provider unavailable")
-        return "Answer based on supplied lecture evidence"
+        return self.result
 
 
 def request(playback_seconds=30, allowed_source_ids=None, video=True):
@@ -153,17 +154,31 @@ def test_failed_provider_returns_unavailable_error():
         )
 
 
-def test_chat_api_is_fail_closed_when_service_is_not_configured():
-    with TestClient(app) as client:
-        response = client.post(
-            "/chat", json=request().model_dump(mode="json")
-        )
+def test_provider_abstention_returns_ungrounded_response_without_citations():
+    result = run(
+        GroundedChatService(
+            Authorizer(),
+            Retriever(),
+            Provider(result=None),
+        ),
+        request(video=False, allowed_source_ids=["doc1"]),
+    )
+
+    assert result.grounded is False
+    assert result.answer == REFUSAL
+    assert result.citations == []
+
+
+def test_chat_api_is_fail_closed_when_service_is_not_configured(monkeypatch):
+    monkeypatch.setattr(app.state, "chat_service", None, raising=False)
+    client = TestClient(app, client=("127.0.0.1", 8001))
+    response = client.post("/chat", json=request().model_dump(mode="json"))
     assert response.status_code == 503
     assert response.json()["detail"] == "Chat integrations are not configured."
 
 
 def test_chat_api_rejects_missing_playback_timestamp():
-    with TestClient(app) as client:
+    with TestClient(app, client=("127.0.0.1", 8001)) as client:
         response = client.post(
             "/chat", json={
                 "session_id": "s1", "question": "What?", "allowed_source_ids": ["video1"],
