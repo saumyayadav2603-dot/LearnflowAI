@@ -10,6 +10,18 @@ import backend.main as api
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(
+        api,
+        "upload_file_to_s3",
+        lambda local_file_path, object_key, content_type=None: (
+            f"s3://test-bucket/{object_key}"
+        ),
+    )
+    monkeypatch.setattr(
+        api,
+        "start_knowledge_base_sync",
+        lambda: {"ingestionJobId": "mock-ingestion-job"},
+    )
     return TestClient(api.app), tmp_path
 
 
@@ -67,8 +79,11 @@ def test_upload_and_extract_real_content(client, ext, contents, kind):
     api_client, directory = client
     response = post(api_client, f"lesson.{ext}", contents())
     assert response.status_code == 200, response.text
-    source = response.json()["stored_filename"]
+    payload = response.json()
+    source = payload["stored_filename"]
     assert (directory / source).is_file()
+    assert payload["s3_uri"] == f"s3://test-bucket/{source}"
+    assert payload["ingestion_job_id"] == "mock-ingestion-job"
     output = api_client.post(f"/materials/{source}/extract")
     assert output.status_code == 200, output.text
     assert output.json()["content"][0]["reference_type"] == kind
