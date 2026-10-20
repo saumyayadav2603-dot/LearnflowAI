@@ -15,6 +15,24 @@ import backend.main as backend_main
 @pytest.fixture()
 def client(monkeypatch, tmp_path):
     monkeypatch.setattr(backend_main, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(
+        backend_main,
+        "upload_file_to_s3",
+        lambda local_file_path, object_key, content_type=None: (
+            f"s3://test-bucket/{object_key}"
+        ),
+    )
+    monkeypatch.setattr(
+        backend_main,
+        "start_knowledge_base_sync",
+        lambda: {"ingestionJobId": "mock-ingestion-job"},
+    )
+    monkeypatch.setattr(
+        backend_main.app.state,
+        "chat_service",
+        object(),
+        raising=False,
+    )
     with TestClient(backend_main.app) as api:
         yield api
 
@@ -48,8 +66,11 @@ def test_health_check(client):
 def test_upload_and_extract_pdf_with_page_reference(client):
     response = upload(client, "lecture.pdf", make_pdf())
     assert response.status_code == 200
-    identifier = response.json()["stored_filename"]
+    payload = response.json()
+    identifier = payload["stored_filename"]
     assert identifier.endswith(".pdf")
+    assert payload["s3_uri"] == f"s3://test-bucket/{identifier}"
+    assert payload["ingestion_job_id"] == "mock-ingestion-job"
     result = client.post(f"/materials/{identifier}/extract")
     assert result.status_code == 200
     assert result.json()["content"][0]["reference_type"] == "page"
@@ -60,7 +81,11 @@ def test_upload_and_extract_pdf_with_page_reference(client):
 def test_upload_and_extract_pptx_with_slide_reference(client):
     response = upload(client, "lecture.pptx", make_pptx())
     assert response.status_code == 200
-    identifier = response.json()["stored_filename"]
+    payload = response.json()
+    identifier = payload["stored_filename"]
+    assert identifier.endswith(".pptx")
+    assert payload["s3_uri"] == f"s3://test-bucket/{identifier}"
+    assert payload["ingestion_job_id"] == "mock-ingestion-job"
     result = client.post(f"/materials/{identifier}/extract")
     assert result.status_code == 200
     assert result.json()["content"][0]["reference_type"] == "slide"
